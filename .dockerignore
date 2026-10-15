@@ -1,0 +1,13 @@
+.git
+.gitignore
+.gitreview
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.retry
+*.log
+kolla/
+kolla/passwords.yml
+build/
