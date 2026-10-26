@@ -3,19 +3,18 @@
 # Kolla-Ansible deployment controller image
 #   Base:    Rocky Linux 9
 #   Python:  3.11 (Rocky AppStream)
-#   Kolla:   2024.2 (Dalmatian) == kolla-ansible 19.8.0 on PyPI
+#   Kolla:   2025.1 (Epoxy) == kolla-ansible 20.6.0 + kolla 20.6.0 on PyPI
 #
-# The upstream stable/2024.2 branch was removed when Dalmatian reached EOL,
-# so the Ansible collection is pinned to its 2024.2-eol tag.
+# The openstack.kolla collection is installed from the stable/2025.1 branch
+# referenced by the kolla-ansible wheel's requirements.yml.
 # See README.md for details and usage.
 #
 # Build args:
 #   ROCKY_VERSION              base image tag               (default: 9)
 #   PYTHON_VERSION             python 3.x from AppStream   (default: 3.11)
-#   KOLLA_ANSIBLE_VERSION      kolla-ansible PyPI version  (default: 19.8.0)
-#   OPENSTACK_RELEASE          release name, labels only   (default: 2024.2)
-#   KOLLA_COLLECTION_BRANCH    branch ref in requirements.yml (default: stable/2024.2)
-#   KOLLA_COLLECTION_REF       replacement git ref          (default: 2024.2-eol)
+#   KOLLA_ANSIBLE_VERSION      kolla-ansible PyPI version  (default: 20.6.0)
+#   KOLLA_VERSION              kolla (image builder) PyPI version (default: 20.6.0)
+#   OPENSTACK_RELEASE          release name, labels only   (default: 2025.1)
 
 ARG ROCKY_VERSION=9
 
@@ -25,7 +24,8 @@ ARG ROCKY_VERSION=9
 FROM rockylinux:${ROCKY_VERSION} AS builder
 
 ARG PYTHON_VERSION=3.11
-ARG KOLLA_ANSIBLE_VERSION=19.8.0
+ARG KOLLA_ANSIBLE_VERSION=20.6.0
+ARG KOLLA_VERSION=20.6.0
 
 # python3.11 comes from AppStream. gcc/make and the -devel headers are only
 # needed if a dependency has no manylinux wheel for CPython 3.11.
@@ -44,7 +44,9 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 RUN python${PYTHON_VERSION} -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel \
-    && /opt/venv/bin/python -m pip install "kolla-ansible==${KOLLA_ANSIBLE_VERSION}"
+    && /opt/venv/bin/python -m pip install \
+        "kolla-ansible==${KOLLA_ANSIBLE_VERSION}" \
+        "kolla==${KOLLA_VERSION}"
 
 # ---------------------------------------------------------------------------
 # Runtime
@@ -52,10 +54,9 @@ RUN python${PYTHON_VERSION} -m venv /opt/venv \
 FROM rockylinux:${ROCKY_VERSION}
 
 ARG PYTHON_VERSION=3.11
-ARG KOLLA_ANSIBLE_VERSION=19.8.0
-ARG OPENSTACK_RELEASE=2024.2
-ARG KOLLA_COLLECTION_BRANCH=stable/2024.2
-ARG KOLLA_COLLECTION_REF=2024.2-eol
+ARG KOLLA_ANSIBLE_VERSION=20.6.0
+ARG KOLLA_VERSION=20.6.0
+ARG OPENSTACK_RELEASE=2025.1
 
 LABEL org.opencontainers.image.title="kolla-ansible" \
       org.opencontainers.image.description="OpenStack Kolla-Ansible ${KOLLA_ANSIBLE_VERSION} (${OPENSTACK_RELEASE}) deployment controller - Rocky Linux, Python ${PYTHON_VERSION}" \
@@ -65,8 +66,10 @@ LABEL org.opencontainers.image.title="kolla-ansible" \
 # openssh-clients: ansible connectivity to target hosts
 # rsync: used by parts of the deployment
 # findutils/which: trivial command lookups during playbook runs
+# git: ansible-galaxy clones the git-sourced openstack.kolla collection
 RUN dnf -y install \
         python${PYTHON_VERSION} \
+        git \
         openssh-clients \
         rsync \
         findutils \
@@ -82,21 +85,12 @@ ENV PATH=/opt/venv/bin:$PATH \
     ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
     ANSIBLE_ROLES_PATH=/usr/share/ansible/roles
 
-# The packaged requirements.yml references the now-deleted stable/2024.2
-# branch; repoint it to the EOL tag, then install all Galaxy dependencies.
-RUN sed -i "s#${KOLLA_COLLECTION_BRANCH}#${KOLLA_COLLECTION_REF}#" \
-        /opt/venv/share/kolla-ansible/requirements.yml \
-    && mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla \
+# Install the Galaxy dependencies listed in the packaged requirements.yml
+# (openstack.kolla from stable/2025.1).
+RUN mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla \
+    && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements.yml \
+        -p /usr/share/ansible/collections \
     && ansible-galaxy collection list
-
-# command `kolla-ansible install-deps` will fails be cause the stable/2024.2
-# branch was removed, so we skip it and just list the installed collections.
-# RUN sed -i "s#${KOLLA_COLLECTION_BRANCH}#${KOLLA_COLLECTION_REF}#" \
-#         /opt/venv/share/kolla-ansible/requirements.yml \
-#     && mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla \
-#     && kolla-ansible install-deps \
-#     && ansible-galaxy collection list
-
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh

@@ -7,30 +7,27 @@ deployment controller, built on **Rocky Linux 9** with **Python 3.11**.
 |-----------|-------|
 | Base image | `rockylinux:9` |
 | Python | 3.11 (AppStream) |
-| Kolla-Ansible | 2024.2 (Dalmatian) — PyPI `19.8.0` |
-| Ansible core | `>=2.16,<2.18` (installed automatically) |
-| Kolla collection | `openstack.kolla` @ `2024.2-eol` |
+| Kolla-Ansible | 2025.1 (Epoxy) — PyPI `20.6.0` |
+| Kolla (image builder) | PyPI `20.6.0` (`kolla-build`) |
+| Ansible core | `>=2.17,<2.19` (installed automatically) |
+| Kolla collection | `openstack.kolla` @ `stable/2025.1` |
 
 The image is meant to be an operator workstation: it bundles the
 `kolla-ansible` CLI, the packaged playbooks, and every Ansible Galaxy
 collection/role required to run a deployment, so no bootstrap step is needed
 inside the container.
 
-## Why the collection is pinned to `2024.2-eol`
+## Collection source
 
-Kolla-Ansible 2024.2 (Dalmatian) reached end of life, and with it the upstream
-`stable/2024.2` branch was deleted from opendev.org. The `requirements.yml`
-shipped inside the `kolla-ansible==19.8.0` wheel still points at that branch,
-so a plain `kolla-ansible install-deps` fails. The image rewrites that
-reference to the still-present `2024.2-eol` git tag before installing the
-collection. Override with `KOLLA_COLLECTION_BRANCH` / `KOLLA_COLLECTION_REF`
-if you build a different release.
+The `requirements.yml` shipped inside the `kolla-ansible==20.6.0` wheel points
+`openstack.kolla` at `stable/2025.1`. The image installs the Galaxy
+dependencies from that file as-is, so no rewriting is needed.
 
 ## Build
 
 ```bash
 make build
-# => kolla-ansible:2024.2-rocky9-py311
+# => kolla-ansible:2025.1-rocky9-py311
 ```
 
 The build needs network access to PyPI and opendev.org / galaxy.ansible.com.
@@ -39,9 +36,8 @@ Arbitrary overrides:
 
 ```bash
 make build \
-  KOLLA_ANSIBLE_VERSION=19.8.0 \
-  KOLLA_COLLECTION_REF=2024.2-eol \
-  TAG=myregistry.example.com/kolla-ansible:dalmatian
+  KOLLA_ANSIBLE_VERSION=20.6.0 \
+  TAG=myregistry.example.com/kolla-ansible:epoxy
 ```
 
 ## Run
@@ -102,14 +98,15 @@ entrypoint seeded `/etc/kolla`.
 
 ## Notes and caveats
 
-- **2024.2 is EOL.** Upstream no longer ships fixes for this release. It is
-  fine for private/lab use, but plan an upgrade path.
-- The build resolves the latest `ansible-core` matching `>=2.16,<2.18`; pin it
+- **The collection tracks a branch.** `stable/2025.1` moves as upstream
+  commits land, so two builds on different days may differ. Pin a commit in
+  `requirements.yml` if you need byte-for-byte reproducibility.
+- The build resolves the latest `ansible-core` matching `>=2.17,<2.19`; pin it
   in the Dockerfile if you need byte-for-byte reproducibility.
 - Secrets are never baked into the image: `passwords.yml` is generated at
   first start inside the mounted `/etc/kolla`.
 - The default entrypoint is `bash`; pass a command to run it directly, e.g.
-  `docker run --rm kolla-ansible:2024.2-rocky9-py311 kolla-ansible --version`.
+  `docker run --rm kolla-ansible:2025.1-rocky9-py311 kolla-ansible --version`.
 
 ## Files
 
