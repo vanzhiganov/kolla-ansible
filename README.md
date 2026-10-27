@@ -13,6 +13,7 @@ deployment controller, built on **Rocky Linux 9** with **Python 3.11**.
 | Kolla collection | `openstack.kolla` @ `stable/2025.1` |
 | Docker CLI | `docker-ce-cli` (Docker CE repo; talks to the host daemon) |
 | Docker SDK (Python) | `>=6.0.0` (required by `kolla-build`, not declared by the kolla wheel) |
+| dbus-python | `>=1.3.2` in the venv (kolla's `kolla_container` module imports `dbus` unconditionally) |
 
 The image is meant to be an operator workstation: it bundles the
 `kolla-ansible` CLI, the packaged playbooks, and every Ansible Galaxy
@@ -117,6 +118,26 @@ entrypoint seeded `/etc/kolla`.
   `docker-ce-cli`; mounting `/var/run/docker.sock` grants it root-level
   access to the host Docker, so treat the image as trusted operator
   tooling. Images built by `kolla-build` land in the host's image store.
+- **Modules run under the venv Python for localhost targets.** With an
+  all-in-one inventory, Ansible's interpreter discovery picks
+  `/opt/venv/bin/python` inside the controller, which is why the venv
+  carries both the docker SDK and `dbus-python` (the `kolla_container`
+  module_utils chain imports `dbus` even for `engine=docker`).
+- **A private D-Bus system bus runs inside the container.** kolla's
+  module_utils construct a `SystemdWorker` (which connects to the system
+  bus and resolves `org.freedesktop.systemd1`) on every `kolla_container`
+  run, even with `engine=docker`. The entrypoint therefore starts
+  `dbus-daemon` when no bus socket exists, and an on-demand activation
+  stub (`kolla-systemd1-stub`) owns the `systemd1` bus name. No systemd
+  methods are ever called for docker-engine deployments; podman-engine
+  deployments need a real systemd host and are not supported from inside
+  this container.
+- **All-in-one (localhost) deploys via DooD need matching host paths.**
+  Bind mounts requested by containers (e.g. `/etc/kolla/cron/...`) are
+  resolved by the *host* daemon against the *host* filesystem. When
+  deploying to `localhost` from this container, mount the config dir at
+  the same path on both sides, e.g.
+  `make shell KOLLA_CONFIG_DIR=/etc/kolla` with `/etc/kolla` on the host.
 - The default entrypoint is `bash`; pass a command to run it directly, e.g.
   `docker run --rm kolla-ansible:2025.1-rocky9-py311 kolla-ansible --version`.
 
@@ -125,7 +146,9 @@ entrypoint seeded `/etc/kolla`.
 | File | Purpose |
 |------|---------|
 | `Dockerfile` | Multi-stage build (builder venv → slim runtime) |
-| `docker-entrypoint.sh` | First-run bootstrap for `/etc/kolla` |
+| `docker-entrypoint.sh` | First-run bootstrap for `/etc/kolla` + private D-Bus system bus |
+| `kolla-systemd1-stub` | Holds the `org.freedesktop.systemd1` bus name for localhost module runs |
+| `org.freedesktop.systemd1.service` | D-Bus activation unit for the stub |
 | `ansible.cfg` | Collections/roles paths for `ansible` & `ansible-galaxy` |
 | `Makefile` | build / rebuild / test / shell / push targets; `shell` mounts the config dir, SSH keys and agent |
 | `.dockerignore` | Keeps the build context small |

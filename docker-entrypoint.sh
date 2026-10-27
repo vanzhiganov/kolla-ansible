@@ -17,6 +17,20 @@ INVENTORY_DIR="${DATA_DIR}/ansible/inventory"
 
 mkdir -p "${KOLLA_CONFIG_DIR}"
 
+# kolla's module_utils construct a SystemdWorker (which connects to the
+# D-Bus system bus) on every kolla_container run, even with engine=docker.
+# This container has no init, so run a private system bus when the socket
+# is missing; org.freedesktop.systemd1 is provided on demand by an
+# activation stub (/usr/local/libexec/kolla-systemd1-stub). Only
+# localhost/all-in-one runs execute modules inside this container - remote
+# targets use their own bus.
+if [ ! -S /run/dbus/system_bus_socket ] && command -v dbus-daemon >/dev/null 2>&1; then
+    echo "kolla-ansible: starting private D-Bus system bus"
+    mkdir -p /run/dbus
+    dbus-daemon --system --fork \
+        || echo "kolla-ansible: WARNING: dbus-daemon failed to start" >&2
+fi
+
 seed_from_examples() {
     local name="$1"
     if [ ! -e "${KOLLA_CONFIG_DIR}/${name}" ] && [ -f "${EXAMPLES_DIR}/${name}" ]; then

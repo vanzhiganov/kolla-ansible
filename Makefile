@@ -58,8 +58,15 @@ test:
 	@docker run --rm --entrypoint kolla-ansible $(REF) --version
 	@echo "== kolla-build version"
 	@docker run --rm --entrypoint kolla-build $(REF) --version
-	@echo "== docker python SDK (kolla-build engine)"
-	@docker run --rm --entrypoint python $(REF) -c 'import docker; print(docker.__version__)'
+	@echo "== module deps in venv (docker SDK + dbus for kolla_container)"
+	@docker run --rm --entrypoint python $(REF) -c 'import docker, dbus; print("docker SDK", docker.__version__, "| dbus-python", dbus.__version__)'
+	@echo "== kolla_container module on localhost (private bus + docker SDK)"
+	@docker run --rm \
+		$(if $(wildcard $(DOCKER_SOCK)),-v $(DOCKER_SOCK):/var/run/docker.sock) \
+		-e ANSIBLE_LIBRARY=/opt/venv/share/kolla-ansible/ansible/library \
+		-e ANSIBLE_MODULE_UTILS=/opt/venv/share/kolla-ansible/ansible/module_utils \
+		$(REF) ansible localhost -m kolla_container \
+		-a "action=compare_container name=kolla-smoke-test"
 	@echo "== ansible version"
 	@docker run --rm --entrypoint ansible $(REF) --version
 	@echo "== python version"

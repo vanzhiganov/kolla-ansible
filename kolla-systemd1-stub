@@ -1,0 +1,23 @@
+#!/opt/venv/bin/python
+"""Own org.freedesktop.systemd1 on the container's private system bus.
+
+kolla's module_utils construct a SystemdWorker (dbus.SystemBus() plus
+get_object('org.freedesktop.systemd1', ...)) on every kolla_container
+module run, even when engine=docker. dbus-python's get_object resolves
+the name owner, so the bus needs something holding that name. This stub
+is activated on demand by dbus-daemon (see the matching file in
+/usr/share/dbus-1/system-services) and only holds the name - no systemd
+methods are ever called for docker-engine deployments.
+
+Podman-engine deployments do call systemd methods and therefore need a
+real systemd host; they are not supported from inside this container.
+"""
+import time
+
+import dbus
+
+bus = dbus.SystemBus()
+bus.request_name("org.freedesktop.systemd1")
+
+while True:
+    time.sleep(3600)

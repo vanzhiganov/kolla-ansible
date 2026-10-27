@@ -31,12 +31,16 @@ ARG KOLLA_VERSION=20.6.0
 
 # python3.11 comes from AppStream. gcc/make and the -devel headers are only
 # needed if a dependency has no manylinux wheel for CPython 3.11.
+# dbus-devel/glib2-devel/pkgconf: build deps for dbus-python (no wheels).
 RUN dnf -y install \
         python${PYTHON_VERSION} \
         python${PYTHON_VERSION}-pip \
         python${PYTHON_VERSION}-devel \
         gcc \
         make \
+        dbus-devel \
+        glib2-devel \
+        pkgconf-pkg-config \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf /var/cache/yum
 
@@ -46,12 +50,17 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 # The Python docker SDK is not declared by the kolla wheel, but kolla-build
 # imports it when engine=docker, so it is installed explicitly.
+# dbus-python: kolla_container's module_utils (kolla_systemd_worker) imports
+# dbus unconditionally on every target; for all-in-one runs interpreter
+# discovery picks this venv's python inside the controller, so the binding
+# must live here, not only in the system python.
 RUN python${PYTHON_VERSION} -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel \
     && /opt/venv/bin/python -m pip install \
         "kolla-ansible==${KOLLA_ANSIBLE_VERSION}" \
         "kolla==${KOLLA_VERSION}" \
-        "docker>=6.0.0"
+        "docker>=6.0.0" \
+        "dbus-python>=1.3.2"
 
 # ---------------------------------------------------------------------------
 # Runtime
@@ -72,6 +81,11 @@ LABEL org.opencontainers.image.title="kolla-ansible" \
 # rsync: used by parts of the deployment
 # findutils/which: trivial command lookups during playbook runs
 # git: ansible-galaxy clones the git-sourced openstack.kolla collection
+# python3-dbus: kolla module_utils imports dbus; needed when modules run
+#               under the system python3 instead of the venv
+# dbus-daemon: private system bus for localhost module runs; kolla's
+#              module_utils connect to it even when engine=docker (started
+#              by the entrypoint, see kolla-systemd1-stub)
 RUN dnf -y install \
         python${PYTHON_VERSION} \
         git \
@@ -79,6 +93,8 @@ RUN dnf -y install \
         rsync \
         findutils \
         which \
+        python3-dbus \
+        dbus-daemon \
     && dnf -y clean all \
     && rm -rf /var/cache/dnf /var/cache/yum
 
@@ -106,6 +122,15 @@ RUN mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla 
     && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements.yml \
         -p /usr/share/ansible/collections \
     && ansible-galaxy collection list
+
+# Private system bus bits: kolla's module_utils talk to D-Bus even when the
+# engine is docker (SystemdWorker is constructed unconditionally). The
+# entrypoint starts dbus-daemon when no bus is present, and this activation
+# stub owns org.freedesktop.systemd1 so the module's lazy proxies can be
+# created. Only localhost/all-in-one runs execute modules inside here.
+COPY kolla-systemd1-stub /usr/local/libexec/kolla-systemd1-stub
+COPY org.freedesktop.systemd1.service /usr/share/dbus-1/system-services/org.freedesktop.systemd1.service
+RUN chmod 0755 /usr/local/libexec/kolla-systemd1-stub
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh

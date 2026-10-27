@@ -1,0 +1,7 @@
+# Activated on demand when kolla's module_utils create a proxy object for
+# org.freedesktop.systemd1 on the container's private system bus
+# (see /usr/local/libexec/kolla-systemd1-stub).
+[D-BUS Service]
+Name=org.freedesktop.systemd1
+Exec=/usr/local/libexec/kolla-systemd1-stub
+User=root
