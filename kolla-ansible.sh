@@ -17,6 +17,12 @@ if [[ -n "${SSH_AUTH_SOCK:-}" && -S "$SSH_AUTH_SOCK" ]]; then
     docker_args+=(-v "$SSH_AUTH_SOCK:/ssh-agent" -e SSH_AUTH_SOCK=/ssh-agent)
 fi
 
+# Host Docker daemon so kolla-build can build images (docker-out-of-docker).
+DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}"
+if [[ -S "$DOCKER_SOCK" ]]; then
+    docker_args+=(-v "$DOCKER_SOCK:/var/run/docker.sock")
+fi
+
 if (($# == 0)); then
     set -- bash
 fi

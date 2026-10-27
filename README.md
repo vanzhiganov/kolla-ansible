@@ -11,6 +11,8 @@ deployment controller, built on **Rocky Linux 9** with **Python 3.11**.
 | Kolla (image builder) | PyPI `20.6.0` (`kolla-build`) |
 | Ansible core | `>=2.17,<2.19` (installed automatically) |
 | Kolla collection | `openstack.kolla` @ `stable/2025.1` |
+| Docker CLI | `docker-ce-cli` (Docker CE repo; talks to the host daemon) |
+| Docker SDK (Python) | `>=6.0.0` (required by `kolla-build`, not declared by the kolla wheel) |
 
 The image is meant to be an operator workstation: it bundles the
 `kolla-ansible` CLI, the packaged playbooks, and every Ansible Galaxy
@@ -49,10 +51,15 @@ your SSH material so Ansible can reach the target hosts:
 ./kolla-ansible.sh
 ```
 
-The script uses the current directory's `kolla/` folder, mounts `~/.ssh` and
-forwards the SSH agent when available, and opens Bash by default. Pass a command
-and its arguments to run it directly, for example `./run.sh kolla-ansible --version`.
-Override the image or config path with `IMAGE` or `KOLLA_CONFIG_DIR`.
+The script uses the current directory's `kolla/` folder, mounts `~/.ssh`,
+forwards the SSH agent when available and bind-mounts `/var/run/docker.sock`
+so `kolla-build` can build images on the host daemon, then opens Bash by
+default. Pass a command and its arguments to run it directly, for example
+`./run.sh kolla-ansible --version`. Override the image, config path or docker
+socket with `IMAGE`, `KOLLA_CONFIG_DIR` or `DOCKER_SOCK`.
+
+`make shell` mounts the same resources (override the host config path with
+`make shell KOLLA_CONFIG_DIR=/srv/kolla`).
 
 On first start the entrypoint seeds an empty `/etc/kolla` with:
 
@@ -92,6 +99,7 @@ entrypoint seeded `/etc/kolla`.
 /opt/venv/share/kolla-ansible/etc_examples/ globals.yml / passwords.yml templates
 /usr/share/ansible/collections/             Galaxy collections (openstack.kolla, ...)
 /usr/share/ansible/roles/                   Galaxy roles
+/usr/bin/docker                             Docker CLI (host daemon via mounted socket)
 /etc/ansible/ansible.cfg                    paths for ansible + ansible-galaxy
 /etc/kolla/                                 runtime config volume
 ```
@@ -105,6 +113,10 @@ entrypoint seeded `/etc/kolla`.
   in the Dockerfile if you need byte-for-byte reproducibility.
 - Secrets are never baked into the image: `passwords.yml` is generated at
   first start inside the mounted `/etc/kolla`.
+- **Image builds run on the host daemon.** The container only ships
+  `docker-ce-cli`; mounting `/var/run/docker.sock` grants it root-level
+  access to the host Docker, so treat the image as trusted operator
+  tooling. Images built by `kolla-build` land in the host's image store.
 - The default entrypoint is `bash`; pass a command to run it directly, e.g.
   `docker run --rm kolla-ansible:2025.1-rocky9-py311 kolla-ansible --version`.
 
@@ -115,5 +127,5 @@ entrypoint seeded `/etc/kolla`.
 | `Dockerfile` | Multi-stage build (builder venv → slim runtime) |
 | `docker-entrypoint.sh` | First-run bootstrap for `/etc/kolla` |
 | `ansible.cfg` | Collections/roles paths for `ansible` & `ansible-galaxy` |
-| `Makefile` | build / rebuild / test / shell / push targets |
+| `Makefile` | build / rebuild / test / shell / push targets; `shell` mounts the config dir, SSH keys and agent |
 | `.dockerignore` | Keeps the build context small |
