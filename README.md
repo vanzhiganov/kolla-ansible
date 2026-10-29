@@ -30,7 +30,7 @@ dependencies from that file as-is, so no rewriting is needed.
 
 ```bash
 make build
-# => kolla-ansible:2025.1-rocky9-py311
+# => kolla-ansible:2025.1-rocky-9
 ```
 
 The build needs network access to PyPI and opendev.org / galaxy.ansible.com.

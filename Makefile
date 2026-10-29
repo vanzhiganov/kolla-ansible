@@ -20,7 +20,7 @@ OPENSTACK_RELEASE     ?= 2025.1
 KOLLA_CONFIG_DIR      ?= $(CURDIR)/kolla
 DOCKER_SOCK           ?= /var/run/docker.sock
 
-TAG ?= $(OPENSTACK_RELEASE)-rocky$(ROCKY_VERSION)-py$(subst .,,$(PYTHON_VERSION))
+TAG ?= $(OPENSTACK_RELEASE)-rocky-$(ROCKY_VERSION)
 REF ?= $(IMAGE):$(TAG)
 
 BUILD_ARGS = \
