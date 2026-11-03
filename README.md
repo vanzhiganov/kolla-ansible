@@ -152,3 +152,10 @@ entrypoint seeded `/etc/kolla`.
 | `ansible.cfg` | Collections/roles paths for `ansible` & `ansible-galaxy` |
 | `Makefile` | build / rebuild / test / shell / push targets; `shell` mounts the config dir, SSH keys and agent |
 | `.dockerignore` | Keeps the build context small |
+
+## Examples
+
+```shell
+kolla-build --base rocky --registry registry.platform-os.org \
+  --openstack-release 2025.1 --base-image git.org.ru/library/rockylinux:9 --push
+```
