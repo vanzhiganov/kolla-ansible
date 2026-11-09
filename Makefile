@@ -67,6 +67,9 @@ test:
 		-e ANSIBLE_MODULE_UTILS=/opt/venv/share/kolla-ansible/ansible/module_utils \
 		$(REF) ansible localhost -m kolla_container \
 		-a "action=compare_container name=kolla-smoke-test"
+	@echo "== ansible.utils ipaddr filter (netaddr + ansible.utils collection)"
+	@docker run --rm $(REF) ansible localhost -m debug \
+		-a "msg={{ '10.0.0.1/24' | ansible.utils.ipaddr('address') }}"
 	@echo "== ansible version"
 	@docker run --rm --entrypoint ansible $(REF) --version
 	@echo "== python version"

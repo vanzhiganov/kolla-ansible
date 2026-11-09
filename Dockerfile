@@ -60,7 +60,8 @@ RUN python${PYTHON_VERSION} -m venv /opt/venv \
         "kolla-ansible==${KOLLA_ANSIBLE_VERSION}" \
         "kolla==${KOLLA_VERSION}" \
         "docker>=6.0.0" \
-        "dbus-python>=1.3.2"
+        "dbus-python>=1.3.2" \
+        "netaddr>=0.7.19"
 
 # ---------------------------------------------------------------------------
 # Runtime
@@ -116,10 +117,22 @@ ENV PATH=/opt/venv/bin:$PATH \
     ANSIBLE_COLLECTIONS_PATH=/usr/share/ansible/collections \
     ANSIBLE_ROLES_PATH=/usr/share/ansible/roles
 
-# Install the Galaxy dependencies listed in the packaged requirements.yml
-# (openstack.kolla from stable/2025.1).
+# Install the Galaxy dependencies the same way `kolla-ansible install-deps`
+# does: requirements.yml (openstack.kolla from stable/2025.1) and
+# requirements-core.yml (ansible.utils, ansible.posix, community.docker, ...).
+# ansible.utils supplies the ipaddr filter used by group_vars/all.yml, so
+# the core set is required for every play, not only for networking roles.
 RUN mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla \
-    && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements.yml \
+    && printf '%s\n' \
+        'collections:' \
+        '  - name: https://opendev.org/openstack/ansible-collection-kolla' \
+        '    type: git' \
+        '    version: unmaintained/2025.1' \
+        > /tmp/kolla-requirements.yml \
+    && ansible-galaxy collection install -r /tmp/kolla-requirements.yml \
+        -p /usr/share/ansible/collections \
+    && rm /tmp/kolla-requirements.yml \
+    && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements-core.yml \
         -p /usr/share/ansible/collections \
     && ansible-galaxy collection list
 
