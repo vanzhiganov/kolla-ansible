@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-IMAGE="${IMAGE:-kolla-ansible:2025.1-rocky9-py311}"
+IMAGE="${IMAGE:-kolla-ansible:2026.1-rocky-9}"
 KOLLA_CONFIG_DIR="${KOLLA_CONFIG_DIR:-$PWD/kolla}"
 
 mkdir -p "$KOLLA_CONFIG_DIR"

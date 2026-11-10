@@ -8,15 +8,15 @@
 #   make push           push the image to a registry
 #
 # Override any of the variables below, e.g.
-#   make build KOLLA_ANSIBLE_VERSION=20.6.0
+#   make build KOLLA_ANSIBLE_VERSION=22.1.0
 #   make shell KOLLA_CONFIG_DIR=/srv/kolla
 
 IMAGE                 ?= kolla-ansible
 ROCKY_VERSION         ?= 9
 PYTHON_VERSION        ?= 3.11
-KOLLA_ANSIBLE_VERSION ?= 20.6.0
-KOLLA_VERSION         ?= 20.6.0
-OPENSTACK_RELEASE     ?= 2025.1
+KOLLA_ANSIBLE_VERSION ?= 22.2.0
+KOLLA_VERSION         ?= 22.2.0
+OPENSTACK_RELEASE     ?= 2026.1
 KOLLA_CONFIG_DIR      ?= $(CURDIR)/kolla
 DOCKER_SOCK           ?= /var/run/docker.sock
 

@@ -7,10 +7,10 @@ deployment controller, built on **Rocky Linux 9** with **Python 3.11**.
 |-----------|-------|
 | Base image | `rockylinux:9` |
 | Python | 3.11 (AppStream) |
-| Kolla-Ansible | 2025.1 (Epoxy) — PyPI `20.6.0` |
-| Kolla (image builder) | PyPI `20.6.0` (`kolla-build`) |
-| Ansible core | `>=2.17,<2.19` (installed automatically) |
-| Kolla collection | `openstack.kolla` @ `stable/2025.1` |
+| Kolla-Ansible | 2026.1 (Gazpacho) — PyPI `22.2.0` |
+| Kolla (image builder) | PyPI `22.2.0` (`kolla-build`) |
+| Ansible core | `!=2.19.0,>=2.19,<2.21` (installed automatically; resolves to 2.19.x on Python 3.11) |
+| Kolla collection | `openstack.kolla` @ `stable/2026.1` |
 | Docker CLI | `docker-ce-cli` (Docker CE repo; talks to the host daemon) |
 | Docker SDK (Python) | `>=6.0.0` (required by `kolla-build`, not declared by the kolla wheel) |
 | dbus-python | `>=1.3.2` in the venv (kolla's `kolla_container` module imports `dbus` unconditionally) |
@@ -22,15 +22,15 @@ inside the container.
 
 ## Collection source
 
-The `requirements.yml` shipped inside the `kolla-ansible==20.6.0` wheel points
-`openstack.kolla` at `stable/2025.1`. The image installs the Galaxy
+The `requirements.yml` shipped inside the `kolla-ansible==22.2.0` wheel points
+`openstack.kolla` at `stable/2026.1`. The image installs the Galaxy
 dependencies from that file as-is, so no rewriting is needed.
 
 ## Build
 
 ```bash
 make build
-# => kolla-ansible:2025.1-rocky-9
+# => kolla-ansible:2026.1-rocky-9
 ```
 
 The build needs network access to PyPI and opendev.org / galaxy.ansible.com.
@@ -39,8 +39,8 @@ Arbitrary overrides:
 
 ```bash
 make build \
-  KOLLA_ANSIBLE_VERSION=20.6.0 \
-  TAG=myregistry.example.com/kolla-ansible:epoxy
+  KOLLA_ANSIBLE_VERSION=22.1.0 \
+  TAG=myregistry.example.com/kolla-ansible:2026.1
 ```
 
 ## Run
@@ -89,7 +89,7 @@ make test
 ```
 
 Runs `kolla-ansible --version`, `ansible --version`, lists the installed
-collections, prints the patched `requirements.yml`, and verifies the
+collections, prints the collection `requirements.yml`, and verifies the
 entrypoint seeded `/etc/kolla`.
 
 ## Image contents
@@ -107,11 +107,12 @@ entrypoint seeded `/etc/kolla`.
 
 ## Notes and caveats
 
-- **The collection tracks a branch.** `stable/2025.1` moves as upstream
+- **The collection tracks a branch.** `stable/2026.1` moves as upstream
   commits land, so two builds on different days may differ. Pin a commit in
   `requirements.yml` if you need byte-for-byte reproducibility.
-- The build resolves the latest `ansible-core` matching `>=2.17,<2.19`; pin it
-  in the Dockerfile if you need byte-for-byte reproducibility.
+- The build resolves the latest `ansible-core` matching
+  `!=2.19.0,>=2.19,<2.21` (2.19.x on Python 3.11; 2.20+ requires Python
+  3.12); pin it in the Dockerfile if you need byte-for-byte reproducibility.
 - Secrets are never baked into the image: `passwords.yml` is generated at
   first start inside the mounted `/etc/kolla`.
 - **Image builds run on the host daemon.** The container only ships
@@ -139,7 +140,7 @@ entrypoint seeded `/etc/kolla`.
   the same path on both sides, e.g.
   `make shell KOLLA_CONFIG_DIR=/etc/kolla` with `/etc/kolla` on the host.
 - The default entrypoint is `bash`; pass a command to run it directly, e.g.
-  `docker run --rm kolla-ansible:2025.1-rocky9-py311 kolla-ansible --version`.
+  `docker run --rm kolla-ansible:2026.1-rocky-9 kolla-ansible --version`.
 
 ## Files
 
@@ -157,5 +158,5 @@ entrypoint seeded `/etc/kolla`.
 
 ```shell
 kolla-build --base rocky --registry registry.platform-os.org \
-  --openstack-release 2025.1 --base-image git.org.ru/library/rockylinux:9 --push
+  --openstack-release 2026.1 --base-image git.org.ru/library/rockylinux:9 --push
 ```

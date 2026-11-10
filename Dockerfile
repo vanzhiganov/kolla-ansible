@@ -3,20 +3,20 @@
 # Kolla-Ansible deployment controller image
 #   Base:    Rocky Linux 9
 #   Python:  3.11 (Rocky AppStream)
-#   Kolla:   2025.1 (Epoxy) == kolla-ansible 20.6.0 + kolla 20.6.0 on PyPI
+#   Kolla:   2026.1 (Gazpacho) == kolla-ansible 22.2.0 + kolla 22.2.0 on PyPI
 #   Docker:  docker-ce-cli only; image builds run on the host daemon through
 #            a bind-mounted /var/run/docker.sock (docker-out-of-docker)
 #
-# The openstack.kolla collection is installed from the stable/2025.1 branch
+# The openstack.kolla collection is installed from the stable/2026.1 branch
 # referenced by the kolla-ansible wheel's requirements.yml.
 # See README.md for details and usage.
 #
 # Build args:
 #   ROCKY_VERSION              base image tag               (default: 9)
 #   PYTHON_VERSION             python 3.x from AppStream   (default: 3.11)
-#   KOLLA_ANSIBLE_VERSION      kolla-ansible PyPI version  (default: 20.6.0)
-#   KOLLA_VERSION              kolla (image builder) PyPI version (default: 20.6.0)
-#   OPENSTACK_RELEASE          release name, labels only   (default: 2025.1)
+#   KOLLA_ANSIBLE_VERSION      kolla-ansible PyPI version  (default: 22.2.0)
+#   KOLLA_VERSION              kolla (image builder) PyPI version (default: 22.2.0)
+#   OPENSTACK_RELEASE          release name, labels only   (default: 2026.1)
 
 ARG ROCKY_VERSION=9
 
@@ -26,8 +26,8 @@ ARG ROCKY_VERSION=9
 FROM rockylinux:${ROCKY_VERSION} AS builder
 
 ARG PYTHON_VERSION=3.11
-ARG KOLLA_ANSIBLE_VERSION=20.6.0
-ARG KOLLA_VERSION=20.6.0
+ARG KOLLA_ANSIBLE_VERSION=22.2.0
+ARG KOLLA_VERSION=22.2.0
 
 # python3.11 comes from AppStream. gcc/make and the -devel headers are only
 # needed if a dependency has no manylinux wheel for CPython 3.11.
@@ -69,9 +69,9 @@ RUN python${PYTHON_VERSION} -m venv /opt/venv \
 FROM rockylinux:${ROCKY_VERSION}
 
 ARG PYTHON_VERSION=3.11
-ARG KOLLA_ANSIBLE_VERSION=20.6.0
-ARG KOLLA_VERSION=20.6.0
-ARG OPENSTACK_RELEASE=2025.1
+ARG KOLLA_ANSIBLE_VERSION=22.2.0
+ARG KOLLA_VERSION=22.2.0
+ARG OPENSTACK_RELEASE=2026.1
 
 LABEL org.opencontainers.image.title="kolla-ansible" \
       org.opencontainers.image.description="OpenStack Kolla-Ansible ${KOLLA_ANSIBLE_VERSION} (${OPENSTACK_RELEASE}) deployment controller - Rocky Linux, Python ${PYTHON_VERSION}" \
@@ -118,20 +118,13 @@ ENV PATH=/opt/venv/bin:$PATH \
     ANSIBLE_ROLES_PATH=/usr/share/ansible/roles
 
 # Install the Galaxy dependencies the same way `kolla-ansible install-deps`
-# does: requirements.yml (openstack.kolla from stable/2025.1) and
+# does: requirements.yml (openstack.kolla from stable/2026.1) and
 # requirements-core.yml (ansible.utils, ansible.posix, community.docker, ...).
-# ansible.utils supplies the ipaddr filter used by group_vars/all.yml, so
+# ansible.utils supplies the ipaddr filter used by group_vars/all, so
 # the core set is required for every play, not only for networking roles.
 RUN mkdir -p /usr/share/ansible/collections /usr/share/ansible/roles /etc/kolla \
-    && printf '%s\n' \
-        'collections:' \
-        '  - name: https://opendev.org/openstack/ansible-collection-kolla' \
-        '    type: git' \
-        '    version: unmaintained/2025.1' \
-        > /tmp/kolla-requirements.yml \
-    && ansible-galaxy collection install -r /tmp/kolla-requirements.yml \
+    && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements.yml \
         -p /usr/share/ansible/collections \
-    && rm /tmp/kolla-requirements.yml \
     && ansible-galaxy collection install -r /opt/venv/share/kolla-ansible/requirements-core.yml \
         -p /usr/share/ansible/collections \
     && ansible-galaxy collection list
