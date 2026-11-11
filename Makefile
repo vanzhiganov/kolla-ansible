@@ -8,8 +8,8 @@
 #   make shell KOLLA_CONFIG_DIR=/srv/kolla
 
 IMAGE                 ?= kolla-ansible
-ROCKY_VERSION         ?= 9
-PYTHON_VERSION        ?= 3.11
+ROCKY_VERSION         ?= 10
+PYTHON_VERSION        ?= 3.12
 KOLLA_ANSIBLE_VERSION ?= 22.2.0
 KOLLA_VERSION         ?= 22.2.0
 OPENSTACK_RELEASE     ?= 2026.1

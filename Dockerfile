@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 #
 # Kolla-Ansible deployment controller image
-#   Base:    Rocky Linux 10
-#   Python:  3.11 (Rocky AppStream)
+#   Base:    Rocky Linux 10 (quay.io/rockylinux/rockylinux:10)
+#   Python:  3.12 (Rocky system python3)
 #   Kolla:   2026.1 (Gazpacho) == kolla-ansible 22.2.0 + kolla 22.2.0 on PyPI
 #   Docker:  docker-ce-cli only; image builds run on the host daemon through
 #            a bind-mounted /var/run/docker.sock (docker-out-of-docker)
@@ -12,8 +12,8 @@
 # See README.md for details and usage.
 #
 # Build args:
-#   ROCKY_VERSION              base image tag               (default: 9)
-#   PYTHON_VERSION             python 3.x from AppStream   (default: 3.11)
+#   ROCKY_VERSION              base image tag               (default: 10)
+#   PYTHON_VERSION             Python version for labels    (default: 3.12)
 #   KOLLA_ANSIBLE_VERSION      kolla-ansible PyPI version  (default: 22.2.0)
 #   KOLLA_VERSION              kolla (image builder) PyPI version (default: 22.2.0)
 #   OPENSTACK_RELEASE          release name, labels only   (default: 2026.1)
@@ -23,19 +23,21 @@ ARG ROCKY_VERSION=10
 # ---------------------------------------------------------------------------
 # Builder: create the virtualenv and install kolla-ansible from PyPI
 # ---------------------------------------------------------------------------
-FROM rockylinux:${ROCKY_VERSION} AS builder
+FROM quay.io/rockylinux/rockylinux:${ROCKY_VERSION} AS builder
 
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 ARG KOLLA_ANSIBLE_VERSION=22.2.0
 ARG KOLLA_VERSION=22.2.0
 
-# python3.11 comes from AppStream. gcc/make and the -devel headers are only
-# needed if a dependency has no manylinux wheel for CPython 3.11.
+# Rocky 10 ships Python 3.12 as the unversioned `python3` package (there are
+# no python3.12-* rpms), so PYTHON_VERSION is informational / label-only.
+# gcc/make and the -devel headers are only needed if a dependency has no
+# manylinux wheel for CPython 3.12.
 # dbus-devel/glib2-devel/pkgconf: build deps for dbus-python (no wheels).
 RUN dnf -y install \
-        python${PYTHON_VERSION} \
-        python${PYTHON_VERSION}-pip \
-        python${PYTHON_VERSION}-devel \
+        python3 \
+        python3-pip \
+        python3-devel \
         gcc \
         make \
         dbus-devel \
@@ -54,7 +56,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 # dbus unconditionally on every target; for all-in-one runs interpreter
 # discovery picks this venv's python inside the controller, so the binding
 # must live here, not only in the system python.
-RUN python${PYTHON_VERSION} -m venv /opt/venv \
+RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel \
     && /opt/venv/bin/python -m pip install \
         "kolla-ansible==${KOLLA_ANSIBLE_VERSION}" \
@@ -66,9 +68,9 @@ RUN python${PYTHON_VERSION} -m venv /opt/venv \
 # ---------------------------------------------------------------------------
 # Runtime
 # ---------------------------------------------------------------------------
-FROM rockylinux:${ROCKY_VERSION}
+FROM quay.io/rockylinux/rockylinux:${ROCKY_VERSION}
 
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 ARG KOLLA_ANSIBLE_VERSION=22.2.0
 ARG KOLLA_VERSION=22.2.0
 ARG OPENSTACK_RELEASE=2026.1
@@ -88,7 +90,7 @@ LABEL org.opencontainers.image.title="kolla-ansible" \
 #              module_utils connect to it even when engine=docker (started
 #              by the entrypoint, see kolla-systemd1-stub)
 RUN dnf -y install \
-        python${PYTHON_VERSION} \
+        python3 \
         git \
         openssh-clients \
         rsync \

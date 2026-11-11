@@ -1,15 +1,15 @@
 # kolla-ansible deployment controller image
 
 A self-contained [Kolla-Ansible](https://docs.openstack.org/kolla-ansible/latest/)
-deployment controller, built on **Rocky Linux 9** with **Python 3.11**.
+deployment controller, built on **Rocky Linux 10** with **Python 3.12**.
 
 | Component | Value |
 |-----------|-------|
-| Base image | `rockylinux:9` |
-| Python | 3.11 (AppStream) |
+| Base image | `quay.io/rockylinux/rockylinux:10` |
+| Python | 3.12 (system `python3`) |
 | Kolla-Ansible | 2026.1 (Gazpacho) — PyPI `22.2.0` |
 | Kolla (image builder) | PyPI `22.2.0` (`kolla-build`) |
-| Ansible core | `!=2.19.0,>=2.19,<2.21` (installed automatically; resolves to 2.19.x on Python 3.11) |
+| Ansible core | `!=2.19.0,>=2.19,<2.21` (installed automatically; resolves to 2.20.x on Python 3.12) |
 | Kolla collection | `openstack.kolla` @ `stable/2026.1` |
 | Docker CLI | `docker-ce-cli` (Docker CE repo; talks to the host daemon) |
 | Docker SDK (Python) | `>=6.0.0` (required by `kolla-build`, not declared by the kolla wheel) |
@@ -30,10 +30,11 @@ dependencies from that file as-is, so no rewriting is needed.
 
 ```bash
 make build
-# => kolla-ansible:2026.1-rocky-9
+# => kolla-ansible:2026.1-rocky-10
 ```
 
-The build needs network access to PyPI and opendev.org / galaxy.ansible.com.
+The build needs network access to quay.io (base image), PyPI,
+opendev.org / galaxy.ansible.com, and download.docker.com (docker-ce-cli).
 
 Arbitrary overrides:
 
@@ -137,7 +138,7 @@ entrypoint seeded `/etc/kolla`.
 ## Image contents
 
 ```
-/opt/venv/                                  Python 3.11 virtualenv
+/opt/venv/                                  Python 3.12 virtualenv
 /opt/venv/share/kolla-ansible/ansible/      packaged playbooks + inventory examples
 /opt/venv/share/kolla-ansible/etc_examples/ globals.yml / passwords.yml templates
 /usr/share/ansible/collections/             Galaxy collections (openstack.kolla, ...)
@@ -154,14 +155,14 @@ entrypoint seeded `/etc/kolla`.
   `requirements.yml` if you need byte-for-byte reproducibility.
 - **2026.1 needs Rocky Linux 10 for `--base rocky` images and hosts.** kolla
   22.2.0 rejects any other Rocky base image, and kolla-ansible prechecks only
-  allow `Rocky` release `10` on target hosts. This concerns the OpenStack
-  service images and the target hosts, not the controller image: the
-  controller only drives the host Docker daemon, so its OS is independent.
-  Rocky 10 requires an x86-64-v3 CPU (AVX2), so building and running those
-  images needs a modern host.
+  allow `Rocky` release `10` on target hosts. The controller image is built on
+  Rocky 10 as well, but that is independent: it only drives the host Docker
+  daemon, so its OS does not have to match the targets. Rocky 10 requires an
+  x86-64-v3 CPU (AVX2), so building and running these images needs a modern
+  host — an older CPU cannot even start a Rocky 10 container.
 - The build resolves the latest `ansible-core` matching
-  `!=2.19.0,>=2.19,<2.21` (2.19.x on Python 3.11; 2.20+ requires Python
-  3.12); pin it in the Dockerfile if you need byte-for-byte reproducibility.
+  `!=2.19.0,>=2.19,<2.21` (2.20.x on Python 3.12); pin it in the Dockerfile
+  if you need byte-for-byte reproducibility.
 - Secrets are never baked into the image: `passwords.yml` is generated at
   first start inside the mounted `/etc/kolla`.
 - **Image builds run on the host daemon.** The container only ships
@@ -189,7 +190,7 @@ entrypoint seeded `/etc/kolla`.
   the same path on both sides, e.g.
   `make shell KOLLA_CONFIG_DIR=/etc/kolla` with `/etc/kolla` on the host.
 - The default entrypoint is `bash`; pass a command to run it directly, e.g.
-  `docker run --rm kolla-ansible:2026.1-rocky-9 kolla-ansible --version`.
+  `docker run --rm kolla-ansible:2026.1-rocky-10 kolla-ansible --version`.
 
 ## Files
 
