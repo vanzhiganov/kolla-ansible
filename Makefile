@@ -1,11 +1,7 @@
 # Kolla-Ansible deployment controller image
 #
-#   make build          build the image
-#   make rebuild        build without cache
-#   make test           run smoke tests inside the image
-#   make shell          drop into a shell with operator resources mounted
-#                       (kolla config dir, ~/.ssh, SSH agent, docker socket)
-#   make push           push the image to a registry
+#   Run `make help` (or just `make`) for the target list and the effective
+#   configuration (all values honour VAR=value overrides).
 #
 # Override any of the variables below, e.g.
 #   make build KOLLA_ANSIBLE_VERSION=22.1.0
@@ -40,12 +36,50 @@ SHELL_MOUNTS += $(if $(and $(SSH_AUTH_SOCK),$(wildcard $(SSH_AUTH_SOCK))),\
 	-v $(SSH_AUTH_SOCK):/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent)
 SHELL_MOUNTS += $(if $(wildcard $(DOCKER_SOCK)),-v $(DOCKER_SOCK):/var/run/docker.sock)
 
+.DEFAULT_GOAL := help
 .PHONY: help build rebuild test shell push clean
 
 help:
-	@echo "Targets: build rebuild test shell push clean"
-	@echo "Image:   $(REF)"
-	@echo "Config:  $(KOLLA_CONFIG_DIR) -> /etc/kolla (make shell)"
+	@echo "kolla-ansible deployment controller image"
+	@echo ""
+	@echo "Release:       $(OPENSTACK_RELEASE) | kolla-ansible $(KOLLA_ANSIBLE_VERSION) | kolla $(KOLLA_VERSION) | Rocky $(ROCKY_VERSION) / Python $(PYTHON_VERSION)"
+	@echo "Image:         $(REF)"
+	@echo "Tag:           $(TAG)"
+	@echo "Config:        $(KOLLA_CONFIG_DIR) -> /etc/kolla (make shell)"
+	@echo ""
+	@echo "Targets:"
+	@echo "  help         show this help"
+	@echo "  build        build the image"
+	@echo "  rebuild      build without cache (--no-cache --pull)"
+	@echo "  test         run smoke tests inside the image"
+	@echo "  shell        interactive shell with operator resources mounted"
+	@echo "  push         push the image to a registry"
+	@echo "  clean        remove the local image"
+	@echo ""
+	@echo "Configuration (override: make <target> VAR=value):"
+	@echo "  IMAGE                  = $(IMAGE)"
+	@echo "  ROCKY_VERSION          = $(ROCKY_VERSION)"
+	@echo "  PYTHON_VERSION         = $(PYTHON_VERSION)"
+	@echo "  KOLLA_ANSIBLE_VERSION  = $(KOLLA_ANSIBLE_VERSION)"
+	@echo "  KOLLA_VERSION          = $(KOLLA_VERSION)"
+	@echo "  OPENSTACK_RELEASE      = $(OPENSTACK_RELEASE)"
+	@echo "  KOLLA_CONFIG_DIR       = $(KOLLA_CONFIG_DIR)"
+	@echo "  DOCKER_SOCK            = $(DOCKER_SOCK)"
+	@echo "  TAG                    = $(TAG)"
+	@echo "  REF                    = $(REF)"
+	@echo ""
+	@echo "Mounts (make shell):"
+	@echo "  config dir     $(KOLLA_CONFIG_DIR) -> /etc/kolla (always)"
+	@echo "  ~/.ssh         $(if $(wildcard $(HOME)/.ssh),mounted read-only,not found)"
+	@echo "  SSH agent      $(if $(and $(SSH_AUTH_SOCK),$(wildcard $(SSH_AUTH_SOCK))),forwarded,not available)"
+	@echo "  docker socket  $(if $(wildcard $(DOCKER_SOCK)),mounted,not found)"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make build KOLLA_ANSIBLE_VERSION=22.1.0"
+	@echo "  make shell KOLLA_CONFIG_DIR=/srv/kolla"
+	@echo "  make build TAG=myregistry.example.com/kolla-ansible:2026.1"
+	@echo ""
+	@echo "Run 'make help VAR=value' to show effective values for an override."
 
 build:
 	docker build $(BUILD_ARGS) -t $(REF) .
