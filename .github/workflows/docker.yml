@@ -1,0 +1,175 @@
+name: Build and push image
+
+# Each release/* branch carries its own version defaults in its Dockerfile.
+# This workflow stays branch-agnostic: it reads OPENSTACK_RELEASE and
+# ROCKY_VERSION from the checked-out Dockerfile and derives the image tags
+# from them, mirroring what `make build` produces locally.
+on:
+  push:
+    branches:
+      - master
+      - 'release/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # master is the default branch but tracks the EOL 2024.2 release, so
+  # `latest` follows the maintained release instead.
+  LATEST_BRANCH: release/2026.1
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.meta.outputs.tags }}
+      labels: ${{ steps.meta.outputs.labels }}
+      version: ${{ steps.meta.outputs.version }}
+      json: ${{ steps.meta.outputs.json }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Derive image version from Dockerfile
+        id: version
+        run: |
+          release=$(sed -n 's/^ARG OPENSTACK_RELEASE=//p' Dockerfile | head -n1)
+          rocky=$(sed -n 's/^ARG ROCKY_VERSION=//p' Dockerfile | head -n1)
+          if [ -z "$release" ] || [ -z "$rocky" ]; then
+            echo "::error::could not read OPENSTACK_RELEASE / ROCKY_VERSION from Dockerfile"
+            exit 1
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "tag=${release}-rocky-${rocky}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # `latest` is emitted explicitly below only for LATEST_BRANCH.
+          flavor: latest=false
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+            type=ref,event=branch
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref_name == env.LATEST_BRANCH }}
+          labels: |
+            org.opencontainers.image.title=kolla-ansible
+            org.opencontainers.image.version=${{ steps.version.outputs.release }}
+
+  build:
+    needs: meta
+    # Native runners for both architectures: no QEMU emulation, so the heavy
+    # dnf/pip/dbus-python build runs at full speed on each platform.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          labels: ${{ needs.meta.outputs.labels }}
+          # The openstack.kolla collection tracks a moving stable branch.
+          # A manual rebuild bypasses the cache so it actually picks up drift.
+          no-cache: ${{ github.event_name == 'workflow_dispatch' }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ github.ref_name }}-${{ matrix.arch }},mode=max
+
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest and push
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          DOCKER_METADATA_OUTPUT_JSON: ${{ needs.meta.outputs.json }}
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          digests=( * )
+          if [ "${#digests[@]}" -eq 0 ]; then
+            echo "::error::no digests were downloaded"
+            exit 1
+          fi
+          args=()
+          while IFS= read -r tag; do
+            args+=( -t "$tag" )
+          done < <(jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          for digest in "${digests[@]}"; do
+            args+=( "$IMAGE@sha256:$digest" )
+          done
+          docker buildx imagetools create "${args[@]}"
+
+      - name: Inspect image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION"
