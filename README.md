@@ -43,6 +43,48 @@ make build \
   TAG=myregistry.example.com/kolla-ansible:2026.1
 ```
 
+## CI / registry images
+
+Pushes to `master` and `release/*` branches build the image for both
+`linux/amd64` and `linux/arm64` on native runners and publish a multi-arch
+manifest to the GitHub Container Registry. A build can also be started by hand
+from **Actions -> Build and push image -> Run workflow**; manual runs bypass
+the build cache so they pick up changes in the `openstack.kolla`
+`stable/2026.1` branch.
+
+| Ref | Tags |
+|-----|------|
+| `release/2026.1` | `2026.1-rocky-<rocky>`, `release-2026.1`, `sha-<short>`, `latest` |
+| `release/2025.1` | `2025.1-rocky-<rocky>`, `release-2025.1`, `sha-<short>` |
+| `master` | `2024.2-rocky-<rocky>`, `master`, `sha-<short>` |
+
+`<rocky>` is that branch's `ARG ROCKY_VERSION`, so the
+`<release>-rocky-<rocky>` tag is exactly what `make build` produces locally.
+`latest` follows the maintained release (`LATEST_BRANCH` in the workflow), not
+the default branch, because `master` still tracks the EOL 2024.2 release. Tags
+are derived from the `ARG`s in each branch's `Dockerfile`, so changing a version
+or adding a new release branch needs no workflow changes.
+
+```bash
+docker pull ghcr.io/vanzhiganov/kolla-ansible:latest
+
+IMAGE=ghcr.io/vanzhiganov/kolla-ansible:latest ./kolla-ansible.sh
+# or
+make shell REF=ghcr.io/vanzhiganov/kolla-ansible:latest
+```
+
+Replace `latest` with a `<release>-rocky-<rocky>` tag from the table to pin a
+specific build.
+
+`make build` still builds locally for the host architecture only, and
+`make push` pushes `$(REF)` — set `REF` to the full registry path to push by
+hand.
+
+> GHCR packages are private by default. In the package settings, link the
+> package to this repository and set its visibility to public if you want
+> unauthenticated pulls. The workflow authenticates with the built-in
+> `GITHUB_TOKEN` (`packages: write`), so no registry secrets are required.
+
 ## Run
 
 Mount a working directory (the Kolla configuration lives in `/etc/kolla`) and
@@ -110,6 +152,13 @@ entrypoint seeded `/etc/kolla`.
 - **The collection tracks a branch.** `stable/2026.1` moves as upstream
   commits land, so two builds on different days may differ. Pin a commit in
   `requirements.yml` if you need byte-for-byte reproducibility.
+- **2026.1 needs Rocky Linux 10 for `--base rocky` images and hosts.** kolla
+  22.2.0 rejects any other Rocky base image, and kolla-ansible prechecks only
+  allow `Rocky` release `10` on target hosts. This concerns the OpenStack
+  service images and the target hosts, not the controller image: the
+  controller only drives the host Docker daemon, so its OS is independent.
+  Rocky 10 requires an x86-64-v3 CPU (AVX2), so building and running those
+  images needs a modern host.
 - The build resolves the latest `ansible-core` matching
   `!=2.19.0,>=2.19,<2.21` (2.19.x on Python 3.11; 2.20+ requires Python
   3.12); pin it in the Dockerfile if you need byte-for-byte reproducibility.
@@ -152,11 +201,32 @@ entrypoint seeded `/etc/kolla`.
 | `org.freedesktop.systemd1.service` | D-Bus activation unit for the stub |
 | `ansible.cfg` | Collections/roles paths for `ansible` & `ansible-galaxy` |
 | `Makefile` | build / rebuild / test / shell / push targets; `shell` mounts the config dir, SSH keys and agent |
+| `.github/workflows/docker.yml` | Builds and pushes multi-arch (`amd64` + `arm64`) images to GHCR |
 | `.dockerignore` | Keeps the build context small |
 
 ## Examples
 
+Build the OpenStack service images and push them to the registry. For the
+2026.1 release (`kolla` 22.2.0), `--base rocky` accepts **only** a Rocky Linux
+10 base image: the generated `base` Dockerfile checks `/etc/os-release` against
+`Rocky Linux 10.* (Red Quartz)`. A Rocky 9 base (`--base-tag 9`) fails with
+`Only releases "Rocky Linux 10.* (Red Quartz)" are supported on rocky`.
+
+`kolla-ansible` derives `openstack_tag` as
+`<openstack_release>-<kolla_base_distro>-<kolla_base_distro_version>` —
+`2026.1-rocky-10` here — while `kolla-build` defaults to tagging images with
+its own version (`22.2.0`), so pass an explicit `--tag` to match.
+
 ```shell
 kolla-build --base rocky --registry registry.platform-os.org \
-  --openstack-release 2026.1 --base-image git.org.ru/library/rockylinux:9 --push
+  --openstack-release 2026.1 \
+  --base-image quay.io/rockylinux/rockylinux --base-tag 10 \
+  --tag 2026.1-rocky-10 \
+  --push
 ```
+
+The upstream default base image is `quay.io/rockylinux/rockylinux:10`
+(`--base-image` + `--base-tag` are separate options in 22.2.0). If you mirror
+base images internally, push a Rocky 10 image to your registry first and use
+`--base-image <registry>/rockylinux --base-tag 10`; for example
+`git.org.ru/library/rockylinux` currently only carries the `9` tag.

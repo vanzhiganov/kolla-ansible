@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 #
 # Kolla-Ansible deployment controller image
-#   Base:    Rocky Linux 9
+#   Base:    Rocky Linux 10
 #   Python:  3.11 (Rocky AppStream)
 #   Kolla:   2026.1 (Gazpacho) == kolla-ansible 22.2.0 + kolla 22.2.0 on PyPI
 #   Docker:  docker-ce-cli only; image builds run on the host daemon through
@@ -18,7 +18,7 @@
 #   KOLLA_VERSION              kolla (image builder) PyPI version (default: 22.2.0)
 #   OPENSTACK_RELEASE          release name, labels only   (default: 2026.1)
 
-ARG ROCKY_VERSION=9
+ARG ROCKY_VERSION=10
 
 # ---------------------------------------------------------------------------
 # Builder: create the virtualenv and install kolla-ansible from PyPI
